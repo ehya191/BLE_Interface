@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telemetry Device - BLE Status</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+        }
+
+        .connection-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: bold;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-disconnect {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .status-connected {
+            background: #4caf50;
+            color: white;
+        }
+
+        .status-disconnected {
+            background: #f44336;
+            color: white;
+        }
+
+        .status-connecting {
+            background: #ff9800;
+            color: white;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-card .icon {
+            font-size: 24px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .status-value {
+            color: #333;
+            font-weight: bold;
+        }
+
+        .status-good {
+            color: #4caf50;
+        }
+
+        .status-warning {
+            color: #ff9800;
+        }
+
+        .status-error {
+            color: #f44336;
+        }
+
+        .map-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            height: 400px;
+        }
+
+        #map {
+            width: 100%;
+            height: 350px;
+            border-radius: 10px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .info-message {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚗 Telemetry Device Status</h1>
+            <p>Real-time vehicle monitoring via Web Bluetooth</p>
+        </div>
+
+        <!-- Connection Panel -->
+        <div class="connection-panel">
+            <h2>Device Connection</h2>
+            <div id="connection-status">
+                <span class="status-badge status-disconnected">Disconnected</span>
+            </div>
+            <div style="margin-top: 20px;">
+                <button id="connect-btn" class="btn" onclick="connectDevice()">
+                    🔗 Connect to Device
+                </button>
+                <button id="disconnect-btn" class="btn btn-disconnect" onclick="disconnectDevice()" style="display: none;">
+                    ❌ Disconnect
+                </button>
+            </div>
+            <div id="device-info" style="margin-top: 20px; display: none;">
+                <p><strong>Device:</strong> <span id="device-name">-</span></p>
+                <p><strong>Firmware:</strong> <span id="firmware-version">-</span></p>
+            </div>
+        </div>
+
+        <!-- Browser Compatibility Check -->
+        <div class="info-message" id="browser-check">
+            ℹ️ Web Bluetooth is supported! You can connect to your device.
+        </div>
+
+        <!-- Error Message -->
+        <div class="error-message" id="error-message"></div>
+
+        <!-- Status Grid -->
+        <div class="status-grid" id="status-grid" style="display: none;">
+            <!-- System Status Card -->
+            <div class="status-card">
+                <h3><span class="icon">💻</span> System Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Uptime</span>
+                    <span class="status-value" id="uptime">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Free Heap</span>
+                    <span class="status-value" id="free-heap">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Used Heap</span>
+                    <span class="status-value" id="used-heap">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Heap Size</span>
+                    <span class="status-value" id="heap-size">-</span>
+                </div>
+            </div>
+
+            <!-- Network Status Card -->
+            <div class="status-card">
+                <h3><span class="icon">📡</span> Network Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Network</span>
+                    <span class="status-value" id="network-status">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Operator</span>
+                    <span class="status-value" id="network-operator">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Signal Quality</span>
+                    <span class="status-value" id="signal-quality">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">GPRS</span>
+                    <span class="status-value" id="gprs-status">-</span>
+                </div>
+            </div>
+
+            <!-- MQTT Status Card -->
+            <div class="status-card">
+                <h3><span class="icon">☁️</span> MQTT Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Connection</span>
+                    <span class="status-value" id="mqtt-status">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Broker</span>
+                    <span class="status-value" id="mqtt-broker">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Port</span>
+                    <span class="status-value" id="mqtt-port">-</span>
+                </div>
+            </div>
+
+            <!-- GPS Status Card -->
+            <div class="status-card">
+                <h3><span class="icon">🛰️</span> GPS Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Fix</span>
+                    <span class="status-value" id="gps-fix">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Satellites</span>
+                    <span class="status-value" id="gps-satellites">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Latitude</span>
+                    <span class="status-value" id="gps-lat">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Longitude</span>
+                    <span class="status-value" id="gps-lon">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Altitude</span>
+                    <span class="status-value" id="gps-alt">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Speed</span>
+                    <span class="status-value" id="gps-speed">-</span>
+                </div>
+            </div>
+
+            <!-- CAN Bus Status Card -->
+            <div class="status-card">
+                <h3><span class="icon">🚌</span> CAN Bus Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Status</span>
+                    <span class="status-value" id="can-status">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Mode</span>
+                    <span class="status-value" id="can-mode">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Bitrate</span>
+                    <span class="status-value" id="can-bitrate">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">RX Count</span>
+                    <span class="status-value" id="can-rx">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">TX Count</span>
+                    <span class="status-value" id="can-tx">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Errors</span>
+                    <span class="status-value" id="can-errors">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map (Optional) -->
+        <div class="map-container" id="map-container" style="display: none;">
+            <h3><span class="icon">🗺️</span> GPS Location</h3>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet for maps (optional) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // BLE Service and Characteristic UUIDs (must match firmware)
+        const SERVICE_UUID_STATUS = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+        const CHAR_UUID_STATUS_JSON = '4fafc301-1fb5-459e-8fcc-c5c9c331914b';
+
+        let bluetoothDevice = null;
+        let statusCharacteristic = null;
+        let map = null;
+        let marker = null;
+
+        // Check browser compatibility
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!navigator.bluetooth) {
+                document.getElementById('browser-check').innerHTML = 
+                    '⚠️ Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera on desktop/Android.';
+                document.getElementById('browser-check').style.background = '#fff3cd';
+                document.getElementById('browser-check').style.color = '#856404';
+                document.getElementById('connect-btn').disabled = true;
+            }
+        });
+
+        async function connectDevice() {
+            try {
+                showStatus('Scanning for devices...', 'connecting');
+                document.getElementById('connect-btn').disabled = true;
+
+                // Request device
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { services: [SERVICE_UUID_STATUS] }
+                    ],
+                    optionalServices: [SERVICE_UUID_STATUS, '180a'] // Device Info
+                });
+
+                showStatus('Connecting...', 'connecting');
+
+                // Connect to GATT server
+                const server = await bluetoothDevice.gatt.connect();
+
+                // Get status service
+                const service = await server.getPrimaryService(SERVICE_UUID_STATUS);
+
+                // Get status characteristic
+                statusCharacteristic = await service.getCharacteristic(CHAR_UUID_STATUS_JSON);
+
+                // Subscribe to notifications
+                await statusCharacteristic.startNotifications();
+                statusCharacteristic.addEventListener('characteristicvaluechanged', handleStatusUpdate);
+
+                // Read initial status
+                const value = await statusCharacteristic.readValue();
+                handleStatusUpdate({ target: { value } });
+
+                // Update UI
+                showStatus('Connected', 'connected');
+                document.getElementById('connect-btn').style.display = 'none';
+                document.getElementById('disconnect-btn').style.display = 'inline-block';
+                document.getElementById('device-info').style.display = 'block';
+                document.getElementById('device-name').textContent = bluetoothDevice.name;
+                document.getElementById('status-grid').style.display = 'grid';
+
+                // Setup disconnect handler
+                bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                showError('Failed to connect: ' + error.message);
+                document.getElementById('connect-btn').disabled = false;
+            }
+        }
+
+        async function disconnectDevice() {
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                bluetoothDevice.gatt.disconnect();
+            }
+        }
+
+        function onDisconnected() {
+            console.log('Device disconnected');
+            showStatus('Disconnected', 'disconnected');
+            document.getElementById('connect-btn').style.display = 'inline-block';
+            document.getElementById('connect-btn').disabled = false;
+            document.getElementById('disconnect-btn').style.display = 'none';
+            document.getElementById('device-info').style.display = 'none';
+            document.getElementById('status-grid').style.display = 'none';
+            document.getElementById('map-container').style.display = 'none';
+        }
+
+        function handleStatusUpdate(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const jsonString = decoder.decode(value);
+
+            try {
+                const status = JSON.parse(jsonString);
+                updateUI(status);
+            } catch (error) {
+                console.error('Failed to parse status JSON:', error);
+            }
+        }
+
+        function updateUI(status) {
+            // System status
+            if (status.system) {
+                document.getElementById('uptime').textContent = status.system.uptime || '-';
+                document.getElementById('free-heap').textContent = formatBytes(status.system.freeHeap);
+                document.getElementById('used-heap').textContent = formatBytes(status.system.heapSize - status.system.freeHeap);
+                document.getElementById('heap-size').textContent = formatBytes(status.system.heapSize);
+            }
+
+            // Network status
+            if (status.network) {
+                updateStatusValue('network-status', status.network.connected, 'Connected', 'Disconnected');
+                document.getElementById('network-operator').textContent = status.network.operator || '-';
+                document.getElementById('signal-quality').textContent = status.network.signalQuality + '%';
+                updateStatusValue('gprs-status', status.network.gprsConnected, 'Connected', 'Disconnected');
+            }
+
+            // MQTT status
+            if (status.mqtt) {
+                updateStatusValue('mqtt-status', status.mqtt.connected, 'Connected', 'Disconnected');
+                document.getElementById('mqtt-broker').textContent = status.mqtt.broker || '-';
+                document.getElementById('mqtt-port').textContent = status.mqtt.port || '-';
+            }
+
+            // GPS status
+            if (status.gps) {
+                updateStatusValue('gps-fix', status.gps.fixed, 'Fixed', 'No Fix');
+                document.getElementById('gps-satellites').textContent = status.gps.satellites || '0';
+                document.getElementById('gps-lat').textContent = status.gps.latitude ? status.gps.latitude.toFixed(6) : '-';
+                document.getElementById('gps-lon').textContent = status.gps.longitude ? status.gps.longitude.toFixed(6) : '-';
+                document.getElementById('gps-alt').textContent = status.gps.altitude ? status.gps.altitude.toFixed(2) + ' m' : '-';
+                document.getElementById('gps-speed').textContent = status.gps.speed ? status.gps.speed.toFixed(2) + ' km/h' : '-';
+
+                // Update map
+                if (status.gps.fixed && status.gps.latitude && status.gps.longitude) {
+                    updateMap(status.gps.latitude, status.gps.longitude);
+                }
+            }
+
+            // CAN status
+            if (status.can) {
+                updateStatusValue('can-status', status.can.active, 'Active', 'Inactive');
+                document.getElementById('can-mode').textContent = status.can.mode || '-';
+                document.getElementById('can-bitrate').textContent = status.can.bitrate ? status.can.bitrate + ' bps' : '-';
+                document.getElementById('can-rx').textContent = status.can.rxCount || '0';
+                document.getElementById('can-tx').textContent = status.can.txCount || '0';
+                document.getElementById('can-errors').textContent = status.can.errorCount || '0';
+            }
+        }
+
+        function updateStatusValue(elementId, condition, trueText, falseText) {
+            const element = document.getElementById(elementId);
+            element.textContent = condition ? trueText : falseText;
+            element.className = 'status-value ' + (condition ? 'status-good' : 'status-error');
+        }
+
+        function updateMap(lat, lon) {
+            if (!map) {
+                document.getElementById('map-container').style.display = 'block';
+                map = L.map('map').setView([lat, lon], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                marker = L.marker([lat, lon]).addTo(map);
+            } else {
+                map.setView([lat, lon], 13);
+                marker.setLatLng([lat, lon]);
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('connection-status');
+            let className = 'status-disconnected';
+            if (type === 'connected') className = 'status-connected';
+            if (type === 'connecting') className = 'status-connecting';
+            
+            statusDiv.innerHTML = `<span class="status-badge ${className}">${message}</span>`;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = '❌ ' + message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+        }
+    </script>
+</body>
+</html>
