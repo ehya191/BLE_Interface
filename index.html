@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -183,7 +184,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .error-message {
@@ -210,6 +213,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
@@ -228,7 +232,8 @@
                 <button id="connect-btn" class="btn" onclick="connectDevice()">
                     🔗 Connect to Device
                 </button>
-                <button id="disconnect-btn" class="btn btn-disconnect" onclick="disconnectDevice()" style="display: none;">
+                <button id="disconnect-btn" class="btn btn-disconnect" onclick="disconnectDevice()"
+                    style="display: none;">
                     ❌ Disconnect
                 </button>
             </div>
@@ -380,6 +385,7 @@
     <script>
         // BLE Service and Characteristic UUIDs (must match firmware)
         const SERVICE_UUID_STATUS = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+        const SERVICE_UUID_DEVICE_INFO = '0000180a-0000-1000-8000-00805f9b34fb';  // ← CHANGED
         const CHAR_UUID_STATUS_JSON = '4fafc301-1fb5-459e-8fcc-c5c9c331914b';
 
         let bluetoothDevice = null;
@@ -390,7 +396,7 @@
         // Check browser compatibility
         window.addEventListener('DOMContentLoaded', () => {
             if (!navigator.bluetooth) {
-                document.getElementById('browser-check').innerHTML = 
+                document.getElementById('browser-check').innerHTML =
                     '⚠️ Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera on desktop/Android.';
                 document.getElementById('browser-check').style.background = '#fff3cd';
                 document.getElementById('browser-check').style.color = '#856404';
@@ -403,12 +409,15 @@
                 showStatus('Scanning for devices...', 'connecting');
                 document.getElementById('connect-btn').disabled = true;
 
-                // Request device
+                // Request device with proper UUID format
                 bluetoothDevice = await navigator.bluetooth.requestDevice({
                     filters: [
                         { services: [SERVICE_UUID_STATUS] }
                     ],
-                    optionalServices: [SERVICE_UUID_STATUS, '180a'] // Device Info
+                    optionalServices: [
+                        SERVICE_UUID_STATUS,
+                        SERVICE_UUID_DEVICE_INFO  // ← Use full UUID
+                    ]
                 });
 
                 showStatus('Connecting...', 'connecting');
@@ -429,6 +438,18 @@
                 // Read initial status
                 const value = await statusCharacteristic.readValue();
                 handleStatusUpdate({ target: { value } });
+
+                // Try to get device info (optional, may fail if service not available)
+                try {
+                    const deviceInfoService = await server.getPrimaryService(SERVICE_UUID_DEVICE_INFO);
+                    const firmwareChar = await deviceInfoService.getCharacteristic('00002a26-0000-1000-8000-00805f9b34fb');
+                    const firmwareValue = await firmwareChar.readValue();
+                    const firmwareVersion = new TextDecoder().decode(firmwareValue);
+                    document.getElementById('firmware-version').textContent = firmwareVersion;
+                } catch (e) {
+                    console.log('Device info not available:', e);
+                    document.getElementById('firmware-version').textContent = 'N/A';
+                }
 
                 // Update UI
                 showStatus('Connected', 'connected');
@@ -553,7 +574,7 @@
             let className = 'status-disconnected';
             if (type === 'connected') className = 'status-connected';
             if (type === 'connecting') className = 'status-connecting';
-            
+
             statusDiv.innerHTML = `<span class="status-badge ${className}">${message}</span>`;
         }
 
@@ -573,4 +594,5 @@
         }
     </script>
 </body>
+
 </html>
