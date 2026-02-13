@@ -222,7 +222,7 @@
             <p>Real-time vehicle monitoring via Web Bluetooth</p>
         </div>
 
-        <!--- Connection Panel --->
+        <!-- Connection Panel -->
         <div class="connection-panel">
             <h2>Device Connection</h2>
             <div id="connection-status">
@@ -409,14 +409,14 @@
                 showStatus('Scanning for devices...', 'connecting');
                 document.getElementById('connect-btn').disabled = true;
 
-                // Request device
+                // Request device with proper UUID format
                 bluetoothDevice = await navigator.bluetooth.requestDevice({
                     filters: [
-                        { namePrefix: 'Telemetry' }
+                        { services: [SERVICE_UUID_STATUS] }
                     ],
                     optionalServices: [
                         SERVICE_UUID_STATUS,
-                        SERVICE_UUID_DEVICE_INFO
+                        SERVICE_UUID_DEVICE_INFO  // ← Use full UUID
                     ]
                 });
 
@@ -424,43 +424,22 @@
 
                 // Connect to GATT server
                 const server = await bluetoothDevice.gatt.connect();
-                console.log('GATT server connected');
 
                 // Get status service
                 const service = await server.getPrimaryService(SERVICE_UUID_STATUS);
-                console.log('Status service obtained');
 
                 // Get status characteristic
                 statusCharacteristic = await service.getCharacteristic(CHAR_UUID_STATUS_JSON);
-                console.log('Status characteristic obtained');
 
-                // Subscribe to notifications FIRST
+                // Subscribe to notifications
                 await statusCharacteristic.startNotifications();
-                console.log('Notifications started');
-
                 statusCharacteristic.addEventListener('characteristicvaluechanged', handleStatusUpdate);
 
-                // ← ADD THIS: Wait for ESP32 to be ready
-                console.log('Waiting for device to prepare data...');
-                await new Promise(resolve => setTimeout(resolve, 1000));  // Wait 1 second
+                // Read initial status
+                const value = await statusCharacteristic.readValue();
+                handleStatusUpdate({ target: { value } });
 
-                // Now read initial value
-                console.log('Reading initial value...');
-                try {
-                    const value = await statusCharacteristic.readValue();
-                    console.log('Initial value read, length:', value.byteLength);
-
-                    if (value.byteLength > 0) {
-                        handleStatusUpdate({ target: { value } });
-                    } else {
-                        console.warn('Initial read returned empty value, waiting for notification...');
-                    }
-                } catch (readError) {
-                    console.error('Failed to read initial value:', readError);
-                    console.log('Will wait for first notification instead');
-                }
-
-                // Try to get device info
+                // Try to get device info (optional, may fail if service not available)
                 try {
                     const deviceInfoService = await server.getPrimaryService(SERVICE_UUID_DEVICE_INFO);
                     const firmwareChar = await deviceInfoService.getCharacteristic('00002a26-0000-1000-8000-00805f9b34fb');
@@ -482,8 +461,6 @@
 
                 // Setup disconnect handler
                 bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
-
-                console.log('Connection complete!');
 
             } catch (error) {
                 console.error('Connection error:', error);
@@ -511,57 +488,14 @@
 
         function handleStatusUpdate(event) {
             const value = event.target.value;
-
-            console.log('=== BLE Data Received ===');
-            console.log('Raw DataView:', value);
-            console.log('Byte length:', value.byteLength);
-
-            // Check if data is empty
-            if (value.byteLength === 0) {
-                console.error('Received empty data');
-                showError('Received empty data from device');
-                return;
-            }
-
-            // Decode to string
             const decoder = new TextDecoder('utf-8');
-            let jsonString = '';
+            const jsonString = decoder.decode(value);
 
-            try {
-                jsonString = decoder.decode(value);
-                console.log('Decoded string length:', jsonString.length);
-                console.log('Decoded string:', jsonString);
-            } catch (decodeError) {
-                console.error('Failed to decode data:', decodeError);
-                showError('Failed to decode data from device');
-                return;
-            }
-
-            // Check if string is empty or contains only whitespace
-            if (!jsonString || jsonString.trim().length === 0) {
-                console.error('Decoded string is empty');
-                showError('Received empty string from device');
-                return;
-            }
-
-            // Check for null bytes or garbage
-            if (jsonString.includes('\0') || jsonString.includes('�')) {
-                console.error('String contains null bytes or garbage');
-                console.log('Hex dump:', Array.from(new Uint8Array(value.buffer))
-                    .map(b => b.toString(16).padStart(2, '0')).join(' '));
-                showError('Received corrupted data from device');
-                return;
-            }
-
-            // Try to parse JSON
             try {
                 const status = JSON.parse(jsonString);
-                console.log('Parsed status:', status);
                 updateUI(status);
-            } catch (parseError) {
-                console.error('Failed to parse JSON:', parseError);
-                console.log('Invalid JSON string:', jsonString);
-                showError('Invalid data format: ' + parseError.message);
+            } catch (error) {
+                console.error('Failed to parse status JSON:', error);
             }
         }
 
