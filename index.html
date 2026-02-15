@@ -492,7 +492,7 @@
             const jsonString = decoder.decode(value);
 
             try {
-                const status = JSON.parse(jsonString);
+                const status = JSON.parse(JSON.stringify(jsonString));
                 updateUI(status);
             } catch (error) {
                 console.error('Failed to parse status JSON:', error);
