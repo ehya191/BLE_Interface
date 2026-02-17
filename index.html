@@ -488,16 +488,34 @@
 
         function handleStatusUpdate(event) {
             const value = event.target.value;
+
+            console.log('=== BLE Data Received ===');
+            console.log('DataView:', value);
+            console.log('Byte length:', value.byteLength);
+
+            // Print raw bytes
+            const bytes = new Uint8Array(value.buffer);
+            console.log('Raw bytes (hex):',
+                Array.from(bytes)
+                    .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                    .join(' '));
+
+            console.log('Raw bytes (decimal):',
+                Array.from(bytes).join(' '));
+
             const decoder = new TextDecoder('utf-8');
             const jsonString = decoder.decode(value);
 
-            console.log(jsonString);
+            console.log('Decoded string:', jsonString);
+            console.log('String length:', jsonString.length);
+            console.log('=========================');
 
             try {
                 const status = JSON.parse(jsonString);
                 updateUI(status);
             } catch (error) {
                 console.error('Failed to parse status JSON:', error);
+                console.error('Attempted to parse:', jsonString);
             }
         }
 
