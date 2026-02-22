@@ -389,9 +389,21 @@
         const CHAR_UUID_STATUS_JSON = '4fafc301-1fb5-459e-8fcc-c5c9c331914b';
 
         let bluetoothDevice = null;
-        let statusCharacteristic = null;
+        let statusChar = null;
+        let networkChar = null;
+        let gpsChar = null;
+        let cyctemChar = null;
         let map = null;
         let marker = null;
+
+        // Store received data
+        let deviceData = {
+            system: {},
+            network: {},
+            gps: {},
+            mqtt: {},
+            can: {}
+        };
 
         // Check browser compatibility
         window.addEventListener('DOMContentLoaded', () => {
@@ -429,15 +441,31 @@
                 const service = await server.getPrimaryService(SERVICE_UUID_STATUS);
 
                 // Get status characteristic
-                statusCharacteristic = await service.getCharacteristic(CHAR_UUID_STATUS_JSON);
+                statusChar = await service.getCharacteristic(CHAR_UUID_STATUS_JSON);
 
                 // Subscribe to notifications
-                await statusCharacteristic.startNotifications();
-                statusCharacteristic.addEventListener('characteristicvaluechanged', handleStatusUpdate);
+                await statusChar.startNotifications();
+                statusChar.addEventListener('characteristicvaluechanged', handleStatusUpdate);
 
-                // Read initial status
-                const value = await statusCharacteristic.readValue();
-                handleStatusUpdate({ target: { value } });
+                // Network status
+                networkChar = await service.getCharacteristic('4fafc302-1fb5-459e-8fcc-c5c9c331914b');
+                await networkChar.startNotifications();
+                networkChar.addEventListener('characteristicvaluechanged', handleNetworkUpdate);
+
+                // GPS location
+                gpsChar = await service.getCharacteristic('4fafc303-1fb5-459e-8fcc-c5c9c331914b');
+                await gpsChar.startNotifications();
+                gpsChar.addEventListener('characteristicvaluechanged', handleGPSUpdate);
+
+                // System info
+                systemChar = await service.getCharacteristic('4fafc304-1fb5-459e-8fcc-c5c9c331914b');
+                await systemChar.startNotifications();
+                systemChar.addEventListener('characteristicvaluechanged', handleSystemUpdate);
+
+                console.log('✓ All characteristics subscribed');
+
+                // Read initial values
+                readAllCharacteristics();
 
                 // Try to get device info (optional, may fail if service not available)
                 try {
@@ -469,7 +497,26 @@
             }
         }
 
-        // Disconnect handler
+        async function readAllCharacteristics() {
+            try {
+                // Read all characteristics
+                const statusValue = await statusChar.readValue();
+                handleStatusUpdate({ target: { value: statusValue } });
+
+                const networkValue = await networkChar.readValue();
+                handleNetworkUpdate({ target: { value: networkValue } });
+
+                const gpsValue = await gpsChar.readValue();
+                handleGPSUpdate({ target: { value: gpsValue } });
+
+                const systemValue = await systemChar.readValue();
+                handleSystemUpdate({ target: { value: systemValue } });
+
+            } catch (error) {
+                console.error('Error reading characteristics:', error);
+            }
+        }
+
         async function disconnectDevice() {
             if (bluetoothDevice && bluetoothDevice.gatt.connected) {
                 bluetoothDevice.gatt.disconnect();
@@ -489,34 +536,66 @@
 
         function handleStatusUpdate(event) {
             const value = event.target.value;
-
-            console.log('=== BLE Data Received ===');
-            console.log('DataView:', value);
-            console.log('Byte length:', value.byteLength);
-
-            // Print raw bytes
-            const bytes = new Uint8Array(value.buffer);
-            console.log('Raw bytes (hex):',
-                Array.from(bytes)
-                    .map(b => '0x' + b.toString(16).padStart(2, '0'))
-                    .join(' '));
-
-            console.log('Raw bytes (decimal):',
-                Array.from(bytes).join(' '));
-
             const decoder = new TextDecoder('utf-8');
             const jsonString = decoder.decode(value);
 
-            console.log('Decoded string:', jsonString);
-            console.log('String length:', jsonString.length);
-            console.log('=========================');
+            console.log('Status update:', jsonString);
 
             try {
-                const status = JSON.parse(jsonString);
-                updateUI(status);
+                const data = JSON.parse(jsonString);
+                // Merge with existing data
+                deviceData = { ...deviceData, ...data };
+                updateUI(deviceData);
             } catch (error) {
                 console.error('Failed to parse status JSON:', error);
-                console.error('Attempted to parse:', jsonString);
+            }
+        }
+
+        function handleNetworkUpdate(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const jsonString = decoder.decode(value);
+
+            console.log('Network update:', jsonString);
+
+            try {
+                const data = JSON.parse(jsonString);
+                deviceData.network = data;
+                updateUI(deviceData);
+            } catch (error) {
+                console.error('Failed to parse network JSON:', error);
+            }
+        }
+
+        function handleGPSUpdate(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const jsonString = decoder.decode(value);
+
+            console.log('GPS update:', jsonString);
+
+            try {
+                const data = JSON.parse(jsonString);
+                deviceData.gps = data;
+                updateUI(deviceData);
+            } catch (error) {
+                console.error('Failed to parse GPS JSON:', error);
+            }
+        }
+
+        function handleSystemUpdate(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const jsonString = decoder.decode(value);
+
+            console.log('System update:', jsonString);
+
+            try {
+                const data = JSON.parse(jsonString);
+                deviceData.system = data;
+                updateUI(deviceData);
+            } catch (error) {
+                console.error('Failed to parse system JSON:', error);
             }
         }
 
