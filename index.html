@@ -544,7 +544,8 @@
             try {
                 const data = JSON.parse(jsonString);
                 // Merge with existing data
-                deviceData = { ...deviceData, ...data };
+                deviceData.mqtt = data.mqtt;
+                deviceData.can = data.can;
                 updateUI(deviceData);
             } catch (error) {
                 console.error('Failed to parse status JSON:', error);
